@@ -104,24 +104,28 @@ def edit_quote(quote_id):
     attributes: set = set(new_data.keys()) & {"author", "text", "rating"}
 
     if 'rating' in attributes and new_data['rating'] not in range(1, 6):
-        attributes.pop('rating')
+        attributes.remove('rating')
 
-    update_quotes = f"UPDATE quotes SET {', '.join(attr + '=?' for attr in attributes)} WHERE id=?"
-    params = tuple(new_data.get(attr) for attr in attributes)+ (quote_id,)
-    connection = get_db()
-    cursor = connection.cursor()
-    cursor.execute(update_quotes, params)
-    rows = cursor.rowcount
+    print(attributes)
+    if attributes:
+        update_quotes = f"UPDATE quotes SET {', '.join(attr + '=?' for attr in attributes)} WHERE id=?"
+        params = tuple(new_data.get(attr) for attr in attributes)+ (quote_id,)
+        connection = get_db()
+        cursor = connection.cursor()
+        cursor.execute(update_quotes, params)
+        rows = cursor.rowcount
 
-    if rows:
-        connection.commit()
-        cursor.close()
-        resp, status_code = get_quote(quote_id)
-        if status_code == 200:
-            return resp, HTTPStatus.OK
+        if rows:
+            connection.commit()
+            cursor.close()
+            resp, status_code = get_quote(quote_id)
+            if status_code == 200:
+                return resp, HTTPStatus.OK
 
-    connection.rollback()
-    return {'error': f'Quote with id={quote_id} not found'}, 404
+        connection.rollback()
+        return {'error': f'Quote with id={quote_id} not found'}, 404
+    else:
+        return {"error": "No valid data to update. The request cannot be empty. Rating must be between 1 and 5"}, 400
 
 
 if __name__ == "__main__":
