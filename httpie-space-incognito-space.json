@@ -25,7 +25,7 @@
         },
         "requests": [
           {
-            "name": "Lesson01 / Get a list of quotes",
+            "name": "01 Get a list of quotes",
             "url": "{{HOST}}{{PORT}}/quotes/",
             "method": "GET",
             "headers": [],
@@ -54,8 +54,8 @@
             }
           },
           {
-            "name": "Lesson01 / Get quote by id",
-            "url": "127.0.0.1:5000/quotes/10",
+            "name": "02 Get quote by id",
+            "url": "{{HOST}}{{PORT}}/quotes/12",
             "method": "GET",
             "headers": [],
             "queryParams": [],
@@ -83,8 +83,8 @@
             }
           },
           {
-            "name": "Lesson01 / Get the number of quotes",
-            "url": "127.0.0.1:5000/quotes/count",
+            "name": "03 Get the num of quotes",
+            "url": "{{HOST}}{{PORT}}/quotes/count",
             "method": "GET",
             "headers": [],
             "queryParams": [],
@@ -112,8 +112,8 @@
             }
           },
           {
-            "name": "Lesson01 / Get random quote",
-            "url": "127.0.0.1:5000/quotes/random",
+            "name": "04 Get random quote",
+            "url": "{{HOST}}{{PORT}}/quotes/random",
             "method": "GET",
             "headers": [],
             "queryParams": [],
@@ -141,7 +141,7 @@
             }
           },
           {
-            "name": "Lesson01 / Create new quote",
+            "name": "05 Create new quote",
             "url": "{{HOST}}{{PORT}}/quotes",
             "method": "POST",
             "headers": [
@@ -162,7 +162,7 @@
                 "name": ""
               },
               "text": {
-                "value": "{\n  \"author\": \"Неизвестен\",\n  \"text\": \"Ничего не сказал.\",\n  \"rating\": 5\n}",
+                "value": "{\n  \"author\": \"Try to create\",\n  \"text\": \"Try to \",\n  \"rating\": 3\n}",
                 "format": "application/json"
               },
               "form": {
@@ -176,8 +176,8 @@
             }
           },
           {
-            "name": "Lesson01 / Edit quote",
-            "url": "{{HOST}}{{PORT}}/quotes/13",
+            "name": "06 Edit quote by id",
+            "url": "{{HOST}}{{PORT}}/quotes/14",
             "method": "PUT",
             "headers": [
               {
@@ -197,7 +197,7 @@
                 "name": ""
               },
               "text": {
-                "value": "{\n  \"author\": \"Отредактированный автор\",  \n  \"text\": \"Отредактированная цитата\"\n}",
+                "value": "{\n  \"author\": \"Edited Author\",\n  \"text\": \"Edited text\",\n  \"rating\": 1\n}",
                 "format": "application/json"
               },
               "form": {
@@ -211,8 +211,8 @@
             }
           },
           {
-            "name": "Lesson01 / Delete quote",
-            "url": "{{HOST}}{{PORT}}/quotes/14",
+            "name": "07 Delete quote by id",
+            "url": "{{HOST}}{{PORT}}/quotes/13",
             "method": "DELETE",
             "headers": [
               {

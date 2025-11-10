@@ -1,132 +1,157 @@
-from http import HTTPStatus
-
-from flask import Flask, jsonify, request, g
+# from typing import Any
+# from flask import g
+from flask import Flask, jsonify, request, abort
 from random import choice
+from http import HTTPStatus
 from pathlib import Path
+# import sqlite3
+from werkzeug.exceptions import HTTPException
 
-import sqlite3
+# from sqlalchemy.exc import InvalidRequestError
+from sqlalchemy.exc import SQLAlchemyError
+from flask_sqlalchemy import SQLAlchemy
+from sqlalchemy.orm import DeclarativeBase
+from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy import String
+
+class Base(DeclarativeBase):
+    pass
 
 BASE_DIR = Path(__file__).parent
 path_to_db = BASE_DIR / "store.db"  # <- путь к БД
 
 app = Flask(__name__)
 
+app.config['SQLALCHEMY_DATABASE_URI'] = f'sqlite:///{BASE_DIR/"main.db"}'
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+
 app.json.ensure_ascii = False
 
-def get_db():
-    db = getattr(g, '_database', None)
-    if db is None:
-        db = g._database = sqlite3.connect(path_to_db)
-    return db
+db = SQLAlchemy(model_class=Base)
+db.init_app(app)
 
-@app.teardown_appcontext
-def close_connection(exception):
-    db = getattr(g, '_database', None)
-    if db is not None:
-        db.close()
+class QuoteModel(db.Model):
+    __tablename__ = 'quotes'
 
-@app.route("/quotes/", defaults={'num': None})
-@app.route("/quotes/<int:num>")
-def get_quote(num:int):
-    keys = ('id', 'author', 'text', 'rating')
-    cursor = get_db().cursor()
-    if num or num == 0:
-        res = cursor.execute("SELECT * FROM quotes WHERE id = ?", (num,)).fetchone()
-        if res:
-            return jsonify(dict(zip(keys, res))), 200
-        return {'Error': f'Quote with id={num} not found'}, 404
+    id: Mapped[int] = mapped_column(primary_key=True)
+    author: Mapped[str] = mapped_column(String(32), index=True, unique=False)
+    text: Mapped[str] = mapped_column(String(255))
+    rating: Mapped[int] = mapped_column(default=1)
 
-    cursor.execute("SELECT * FROM quotes")
-    res = cursor.fetchall()
-    qts = []
-    for res in res:
-        qts.append(dict(zip(keys, res)))
-    return jsonify(qts), 200
+    def __init__(self, author, text, rating):
+        self.author = author
+        self.text  = text
+        self.rating = rating
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "author": self.author,
+            "text": self.text,
+            "rating": self.rating
+        }
+
+def iterate(temp_db):
+    temp_quotes = []
+    for quote in temp_db:
+        temp_quotes.append(quote.to_dict())
+    return temp_quotes
+
+@app.errorhandler(HTTPException)
+def handle_exception(e):
+    return jsonify({'Message': e.description}), e.code
+
+@app.route("/quotes/", defaults={'quotes_id': None})
+@app.route("/quotes/<int:quotes_id>")
+def get_quote(quotes_id:int):
+    if quotes_id:
+        quotes_db = db.session.scalars(db.select(QuoteModel).where(QuoteModel.id == quotes_id)).all()
+    else:
+        quotes_db = db.session.scalars(db.select(QuoteModel)).all()
+    if not quotes_db:
+        abort(HTTPStatus.NOT_FOUND, f'Quote with id={quotes_id} not found')
+    return jsonify(iterate(quotes_db)), HTTPStatus.OK
 
 @app.route("/quotes/count")
 def quotes_count():
-    return  jsonify({'count': get_db().cursor().execute("SELECT count(*) as count FROM quotes").fetchone()[0]}), 200
+    quotes_db = db.session.scalars(db.select(QuoteModel)).all()
+    return  jsonify({'count': len(quotes_db)}), HTTPStatus.OK
 
 @app.route("/quotes/random")
 def quotes_random():
-    res = get_db().cursor().execute("SELECT id FROM quotes").fetchall()
-    return get_quote((choice(res))[0]) if res else jsonify({'Message': 'Response is empty.'})
+    quotes_db = db.session.scalars(db.select(QuoteModel)).all()
+    return jsonify((choice(iterate(quotes_db)))) if quotes_db else jsonify({'Message': 'Response is empty.'})
 
 @app.route("/quotes", methods=['POST'])
 def create_quote():
     data = request.json
 
     if not data:
-        return {'error': 'No valid data to update'}, 400
+        abort(HTTPStatus.BAD_REQUEST, 'No valid data to update')
 
-    auth_req = data.get("author")
-    txt_req = data.get("text")
-    rtg_reg = data.get("rating")
+    auth = data.get("author")
+    txt = data.get("text")
+    rng = data.get("rating")
 
-    if auth_req and txt_req and rtg_reg:
+    if auth and txt and rng:
 
-        if rtg_reg not in range(1, 6):
-            return {"error": "Rating must be between 1 and 5"}, 400
+        if rng and rng not in range(1, 6):
+            abort(HTTPStatus.BAD_REQUEST, 'Rating must be between 1 and 5')
 
         try:
-            cursor = get_db().cursor()
-            num = cursor.execute("INSERT INTO quotes (author,text,rating) VALUES (?, ?, ?)", (auth_req, txt_req, rtg_reg)).lastrowid
-            get_db().commit()
-            return jsonify({'id': num, 'author': auth_req, 'text': txt_req, 'rating': rtg_reg}), 201
+            with app.app_context():
+                new_quote = QuoteModel(auth, txt, rng)
+                db.session.add(new_quote)
+                db.session.commit()
+                quote_id = new_quote.id
+            return jsonify({'id': quote_id, 'author': auth, 'text': txt, 'rating': rng}), HTTPStatus.CREATED
         except Exception as e:
-            return jsonify({'Error': str(e)}), 400
+            abort(HTTPStatus.BAD_REQUEST, f'{str(e)}')
 
-    return {"error": "No valid data to update. Required: <author>, <text>, <rating>. Rating must be between 1 and 5"}, 400
+    abort(HTTPStatus.BAD_REQUEST, f'No valid data to update. Required: <author>, <text>, <rating>. Rating must be between 1 and 5')
 
-@app.route("/quotes/", methods=['DELETE'], defaults={'num': None})
-@app.route("/quotes/<int:num>", methods=['DELETE'])
-def delete_quote(num:int):
-    if num or num == 0:
+@app.route("/quotes/", methods=['DELETE'], defaults={'quote_id': None})
+@app.route("/quotes/<int:quote_id>", methods=['DELETE'])
+def delete_quote(quote_id:int):
+    if quote_id:
+        quote = db.get_or_404(entity=QuoteModel, ident=quote_id, description=f"Quote with id={quote_id} not found")
+        db.session.delete(quote)
         try:
-            cursor = get_db().cursor()
-            val = cursor.execute(f"DELETE FROM quotes WHERE id = ?", (num,)).rowcount
-            get_db().commit()
-            if val >0:
-                return jsonify({'Message': f'Quote whit id={num} was deleted.'}), 200
-            elif val == 0:
-                return {'Error': "DELETE operation failed."}, 400
-        except Exception as e:
-            return {'Error': str(e)}, 400
-
+            db.session.commit()
+            return jsonify({"Message": f"Quote with id {quote_id} was deleted."}), HTTPStatus.OK
+        except SQLAlchemyError as e:
+            db.session.rollback()
+            abort(HTTPStatus.SERVICE_UNAVAILABLE, f'{str(e)}')
     else:
-        return jsonify({'Error': 'The request is empty.'}), 400
+        abort(HTTPStatus.BAD_REQUEST, 'The request is empty')
 
-@app.route('/quotes/<int:quote_id>', methods=['PUT'])
-def edit_quote(quote_id):
+
+@app.route("/quotes/<int:quote_id>", methods=['PUT'])
+def edit_quote(quote_id: int):
     new_data = request.json
+
     if not new_data:
-        return {'error': 'No valid data to update'}, 400
+        abort(HTTPStatus.BAD_REQUEST, 'No valid data to update')
 
-    attributes: set = set(new_data.keys()) & {"author", "text", "rating"}
-    if 'rating' in attributes and new_data['rating'] not in range(1, 6):
-        attributes.remove('rating')
-    if not attributes:
-        return {"error": "No valid data to update. The request cannot be empty. Rating must be between 1 and 5"}, 400
+    auth = new_data.get("author")
+    txt = new_data.get("text")
+    rng = new_data.get("rating")
 
-    resp, status_code = get_quote(quote_id)
-    if status_code != 200:
-        return {'error': f'Quote with id={quote_id} not found'}, 404
+    if auth or txt or rng in range(1, 6):
 
-    update_quotes = f"UPDATE quotes SET {', '.join(attr + '=?' for attr in attributes)} WHERE id=?"
-    params = tuple(new_data.get(attr) for attr in attributes)+ (quote_id,)
-    connection = get_db()
-    cursor = connection.cursor()
-    cursor.execute(update_quotes, params)
-    rows = cursor.rowcount
+        quote = db.get_or_404(entity=QuoteModel, ident=quote_id, description=f"Quote with id={quote_id} not found")
 
-    if rows:
-        connection.commit()
-        cursor.close()
+        try:
+            for key_as_attr, value in new_data.items():
+                setattr(quote, key_as_attr, value)
 
-    resp, status_code = get_quote(quote_id)
+            db.session.commit()
+            return jsonify(quote.to_dict()), 200
+        except SQLAlchemyError as e:
+            db.session.rollback()
+            abort(503, f"Database error: {str(e)}")
 
-    return resp, status_code
-
+    abort(HTTPStatus.BAD_REQUEST, f'No valid data to update. Required: <author>, <text>, <rating>. Rating must be between 1 and 5')
 
 if __name__ == "__main__":
     app.run(debug=True)
