@@ -197,7 +197,7 @@
                 "name": ""
               },
               "text": {
-                "value": "{\n  \"author\": \"Edited Author\",\n  \"text\": \"Edited text\",\n  \"rating\": 1\n}",
+                "value": "{\n  \"author\": \"Author\",\n  \"text\": \"Edited text\",\n  \"rating\": 1\n}",
                 "format": "application/json"
               },
               "form": {
@@ -221,6 +221,35 @@
                 "enabled": true
               }
             ],
+            "queryParams": [],
+            "pathParams": [],
+            "auth": {
+              "type": "inherited"
+            },
+            "body": {
+              "type": "none",
+              "file": {
+                "name": ""
+              },
+              "text": {
+                "value": "",
+                "format": "application/json"
+              },
+              "form": {
+                "isMultipart": false,
+                "fields": []
+              },
+              "graphql": {
+                "query": "",
+                "variables": ""
+              }
+            }
+          },
+          {
+            "name": "08 Filter quote by author/rating/text",
+            "url": "{{HOST}}{{PORT}}/quotes/filter?author=Bill%20Gates",
+            "method": "GET",
+            "headers": [],
             "queryParams": [],
             "pathParams": [],
             "auth": {

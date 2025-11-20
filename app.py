@@ -1,5 +1,7 @@
 # from typing import Any
 # from flask import g
+from crypt import methods
+
 from flask import Flask, jsonify, request, abort
 from random import choice
 from http import HTTPStatus
@@ -8,7 +10,7 @@ from pathlib import Path
 from werkzeug.exceptions import HTTPException
 
 # from sqlalchemy.exc import InvalidRequestError
-from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.exc import SQLAlchemyError, InvalidRequestError
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy.orm import DeclarativeBase
 from sqlalchemy.orm import Mapped, mapped_column
@@ -75,7 +77,7 @@ def get_quote(quotes_id:int):
 @app.route("/quotes/count")
 def quotes_count():
     quotes_db = db.session.scalars(db.select(QuoteModel)).all()
-    return  jsonify({'count': len(quotes_db)}), HTTPStatus.OK
+    return jsonify({'count': len(quotes_db)}), HTTPStatus.OK
 
 @app.route("/quotes/random")
 def quotes_random():
@@ -108,7 +110,7 @@ def create_quote():
         except Exception as e:
             abort(HTTPStatus.BAD_REQUEST, f'{str(e)}')
 
-    abort(HTTPStatus.BAD_REQUEST, f'No valid data to update. Required: <author>, <text>, <rating>. Rating must be between 1 and 5')
+    abort(HTTPStatus.BAD_REQUEST, f'No valid data to update. Required: author, text, rating. Rating must be between 1 and 5')
 
 @app.route("/quotes/", methods=['DELETE'], defaults={'quote_id': None})
 @app.route("/quotes/<int:quote_id>", methods=['DELETE'])
@@ -146,12 +148,27 @@ def edit_quote(quote_id: int):
                 setattr(quote, key_as_attr, value)
 
             db.session.commit()
-            return jsonify(quote.to_dict()), 200
+            return jsonify(quote.to_dict()), HTTPStatus.OK
         except SQLAlchemyError as e:
             db.session.rollback()
-            abort(503, f"Database error: {str(e)}")
+            abort(HTTPStatus.SERVICE_UNAVAILABLE, f"Database error: {str(e)}")
 
-    abort(HTTPStatus.BAD_REQUEST, f'No valid data to update. Required: <author>, <text>, <rating>. Rating must be between 1 and 5')
+    abort(HTTPStatus.BAD_REQUEST, f'No valid data to update. Required: author, text, rating. Rating must be between 1 and 5')
+
+
+@app.route('/quotes/filter', methods=['GET'])
+def filter_quote():
+    try:
+        quotes_db = db.session.scalars(db.select(QuoteModel).filter_by(**request.args)).all()
+    except InvalidRequestError:
+        return (
+            ('No valid data to filter. Required: author, text, rating.'
+                 f'Received: {", ".join(request.args.keys())}'
+             ),
+            HTTPStatus.BAD_REQUEST,
+        )
+    return [quote.to_dict() for quote in quotes_db], HTTPStatus.OK
+
 
 if __name__ == "__main__":
     app.run(debug=True)
